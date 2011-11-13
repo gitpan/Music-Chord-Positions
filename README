@@ -1,0 +1,22 @@
+To install this module type the following:
+
+   perl Makefile.PL
+   make
+   make test
+   make install
+
+But really, why would you do that? Use cpan or cpanm, and
+local::lib, etc.
+
+DEPENDENCIES
+
+This module requires various Perl modules, as detailed in Makefile.PL.
+Music::Chord::Note is optional but recommended.
+
+COPYRIGHT AND LICENCE
+
+Copyright (C) 2011 Jeremy Mates
+
+This library is free software; you can redistribute it and/or modify it
+under the same terms as Perl itself, either Perl version 5.14 or, at
+your option, any later version of Perl 5 you may have available.
