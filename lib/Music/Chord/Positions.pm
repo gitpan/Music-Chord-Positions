@@ -8,13 +8,13 @@ use Exporter ();
 use List::MoreUtils qw(uniq);
 use List::Util qw(max min);
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 our ( @ISA, @EXPORT_OK, %EXPORT_TAGS );
-@ISA       = qw(Exporter);
+@ISA = qw(Exporter);
+
 @EXPORT_OK = qw(&chord_inv &chord_pos &chords2voices &scale_deg);
-%EXPORT_TAGS =
-  ( all => [qw(chord_inv chord_pos chords2voices scale_deg)] );
+%EXPORT_TAGS = ( all => [qw(chord_inv chord_pos chords2voices scale_deg)] );
 
 my $DEG_IN_SCALE = 12;
 
@@ -65,21 +65,21 @@ sub chord_pos {
     $min_pitch_norm, $next_register, $unique_pitch_count,
   );
 
-  $params{'-iinterval-max'} ||= 19;
+  $params{'interval_adj_max'} ||= 19;
 
-  if ( exists $params{'-octaves'} ) {
-    $params{'-octaves'} = 2 if $params{'-octaves'} < 2;
+  if ( exists $params{'octave_count'} ) {
+    $params{'octave_count'} = 2 if $params{'octave_count'} < 2;
   } else {
-    $params{'-octaves'} = 2;
+    $params{'octave_count'} = 2;
   }
 
-  if ( exists $params{'-voices'} ) {
-    if ( @$pitch_set > $params{'-voices'} ) {
+  if ( exists $params{'voice_count'} ) {
+    if ( @$pitch_set > $params{'voice_count'} ) {
       die
         "case where pitches in chord exceeds allowed voices not implemented";
     }
   } else {
-    $params{'-voices'} = @$pitch_set;
+    $params{'voice_count'} = @$pitch_set;
   }
 
   @ps = sort { $a <=> $b } @$pitch_set;
@@ -88,8 +88,8 @@ sub chord_pos {
   $next_register      = $ps[-1] + ( $DEG_IN_SCALE - $ps[-1] % $DEG_IN_SCALE );
   $unique_pitch_count = ( uniq( map { $_ % $DEG_IN_SCALE } @ps ) );
 
-  if ( $params{'-voices'} > @ps ) {
-    my $doubled_count = $params{'-voices'} - @ps;
+  if ( $params{'voice_count'} > @ps ) {
+    my $doubled_count = $params{'voice_count'} - @ps;
     die "multiple extra voices not implemented" if $doubled_count > 1;
 
     # Double lowest pitch in octave above highest pitch C E G -> C E G C
@@ -97,16 +97,19 @@ sub chord_pos {
   }
 
   @potentials = @ps;
-  for my $i ( 1 .. $params{'-octaves'} ) {
+  for my $i ( 1 .. $params{'octave_count'} ) {
     for my $n (@ps) {
       push @potentials, $n + $i * $DEG_IN_SCALE;
     }
   }
   @potentials = uniq sort { $a <=> $b } @potentials;
 
-  for my $i ( 0 .. $params{'-voices'} - 1 ) {
+  for my $i ( 0 .. $params{'voice_count'} - 1 ) {
     $voice_iters[$i] = $i;
-    $voice_max[$i]   = $#potentials - $params{'-voices'} + $i + 1;
+    $voice_max[$i]   = $#potentials - $params{'voice_count'} + $i + 1;
+  }
+  if ( exists $params{'root_lock'} and $params{'root_lock'} ) {
+    $voice_max[0] = $voice_iters[0];
   }
 
   while ( $voice_iters[0] <= $voice_max[0] ) {
@@ -119,12 +122,12 @@ sub chord_pos {
         $harmeq{ $p % $DEG_IN_SCALE }++;
       }
 
-      unless ( exists $params{'-disable-upc'} and $params{'-disable-upc'} ) {
+      unless ( exists $params{'no_limit_uniq'} and $params{'no_limit_uniq'} ) {
         next if keys %harmeq < $unique_pitch_count;
       }
 
-      unless ( exists $params{'-all-doublings'}
-        and $params{'-all-doublings'} ) {
+      unless ( exists $params{'no_limit_doublings'}
+        and $params{'no_limit_doublings'} ) {
         for my $k ( grep { $_ != $min_pitch_norm } keys %harmeq ) {
           next TOPV if $harmeq{$k} > 1;
         }
@@ -134,7 +137,7 @@ sub chord_pos {
       my @intervals;
       for my $j ( 1 .. $#chord ) {
         push @intervals, $chord[$j] - $chord[ $j - 1 ];
-        next TOPV if $intervals[-1] > $params{'-iinterval-max'};
+        next TOPV if $intervals[-1] > $params{'interval_adj_max'};
       }
       next TOPV if $seen_intervals{"@intervals"}++;
 
@@ -148,10 +151,11 @@ sub chord_pos {
       }
     }
 
-    unless ( exists $params{'-any-root'} and $params{'-any-root'} ) {
+    unless ( exists $params{'root_any'} and $params{'root_any'} ) {
       while (
         $potentials[ $voice_iters[0] ] % $DEG_IN_SCALE != $min_pitch_norm ) {
         $voice_iters[0]++;
+        last if $voice_iters[0] > $voice_max[0];
       }
     }
 
@@ -225,7 +229,8 @@ from a named chord.
 
 Using the resulting pitch sets and so forth left as exercise to user;
 converting the semitones to L<MIDI::Simple> or voices to lilypond
-compatible output should not be too difficult.
+compatible output should not be too difficult (see the C<eg> directory
+of this module's distribution for sample scripts).
 
 =head1 SUBROUTINES
 
@@ -257,44 +262,51 @@ than 19 semitones (octave+fifth) between adjacent pitches will also be
 excluded, as will transpositions of the same voicing into higher
 registers.
 
-The B<chord_pos> method can be influenced by the following parameters:
+The B<chord_pos> method can be influenced by the following parameters
+(default values are shown). Beware that removing restrictions may result
+in many, many, many different voicings for larger pitch sets.
 
 =over 4
 
-=item B<-all-doublings> I<1>
+=item B<interval_adj_max> I<19>
+
+Largest interval allowed between two adjacent voices, in semitones.
+
+=item B<no_limit_doublings> I<0>
 
 If set and true, allows doublings on all pitches, not just the default
 of the root pitch.
 
-=item B<-any-root> I<1>
-
-If set and true, allows the root pitch of the voicing to be any member
-of the original pitch set, not just the lowest of that set.
-
-=item B<-disable-upc> I<1>
+=item B<no_limit_uniq> I<0>
 
 If set and true, disables the unique pitch check. That is, voicings will
 be allowed with fewer pitches than in the original pitch set.
 
-=item B<-iinterval-max> I<19>
-
-Largest adjacent pitch interval allowed between two pitches of a
-voicing, in semitones.
-
-=item B<-octaves> I<2>
+=item B<octave_count> I<2>
 
 How far above the register of the chord to generate voicings in. If set
-to a large value, the B<-iinterval-max> value should likely also be
+to a large value, the B<interval_adj_max> value may also need to be
 increased.
 
-=item B<-voices> I<depends on pitch set passed>
+=item B<root_any> I<0>
+
+If set and true, allows the root pitch of the voicing to be any member
+of the original pitch set, not just the lowest of that set. Pointless if
+B<root_lock> set.
+
+=item B<root_lock> I<0>
+
+Prevent the root pitch from changing in the generated positions. Defeats
+B<root_any> option.
+
+=item B<voice_count> I<depends on pitch set passed>
 
 Use this to customize the number of voices in the different chord
 voicings. At present, only one extra voice above the number of voices
 in the pitch set is implemented. Mostly to support SATB for three-
 pitch chords, in which case the root pitch will be doubled:
 
-  chord_pos([0,4,7], -voices => 4);
+  chord_pos([0,4,7], voice_count => 4);
 
 =back
 
@@ -308,6 +320,11 @@ tenor from the upper voices.
 Accepts a pitch set list (such as returned by B<chord_pos>), transposes
 vertical chords into horizontal voices. Returns list of voices, highest
 to lowest.
+
+=item B<scale_deg>( )
+
+Returns number of degrees in the scale. Should always be 12, unless
+someone sneaks in support for alternate scale systems in behind my back.
 
 =back
 
