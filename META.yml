@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:               Music-Chord-Positions
-version:            0.04
+version:            0.05
 abstract:           generate various chord inversions and voicings
 author:
     - Jeremy Mates <jmates@cpan.org>

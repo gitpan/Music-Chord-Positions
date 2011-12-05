@@ -5,10 +5,10 @@ use warnings;
 
 use Carp qw(croak);
 use Exporter ();
-use List::MoreUtils qw(uniq);
+use List::MoreUtils qw(all uniq);
 use List::Util qw(max min);
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 our ( @ISA, @EXPORT_OK, %EXPORT_TAGS );
 @ISA = qw(Exporter);
@@ -65,12 +65,21 @@ sub chord_pos {
     $min_pitch_norm, $next_register, $unique_pitch_count,
   );
 
-  $params{'interval_adj_max'} ||= 19;
+  $params{'interval_adj_max'} =
+    ( exists $params{'interval_adj_max'}
+      and defined $params{'interval_adj_max'} )
+    ? $params{'interval_adj_max'}
+    : 19;
 
   if ( exists $params{'octave_count'} ) {
     $params{'octave_count'} = 2 if $params{'octave_count'} < 2;
   } else {
     $params{'octave_count'} = 2;
+  }
+
+  if ( exists $params{'pitch_max'} and $params{'pitch_max'} < 1 ) {
+    $params{'pitch_max'} =
+      ( $params{'octave_count'} + 1 ) * $DEG_IN_SCALE + $params{'pitch_max'};
   }
 
   if ( exists $params{'voice_count'} ) {
@@ -123,12 +132,10 @@ sub chord_pos {
       for my $p (@chord) {
         $harmeq{ $p % $DEG_IN_SCALE }++;
       }
-
       unless ( exists $params{'no_limit_uniq'} and $params{'no_limit_uniq'} )
       {
         next if keys %harmeq < $unique_pitch_count;
       }
-
       unless ( exists $params{'no_limit_doublings'}
         and $params{'no_limit_doublings'} ) {
         for my $k ( grep { $_ != $min_pitch_norm } keys %harmeq ) {
@@ -136,13 +143,45 @@ sub chord_pos {
         }
       }
 
-      # Nix any identical chord voicings (c e g == c' e' g')
-      my @intervals;
+      my ( @intervals, %intv_by_idx );
       for my $j ( 1 .. $#chord ) {
         push @intervals, $chord[$j] - $chord[ $j - 1 ];
         next TOPV if $intervals[-1] > $params{'interval_adj_max'};
+
+        $intv_by_idx{ $j - 1 } = $intervals[-1] if @chord > 2;
       }
-      next TOPV if $seen_intervals{"@intervals"}++;
+      # TODO these routines have not been tested against chords with 5+
+      # voices, so may allow pitch sets that violate the spirit of the
+      # following (3rds in the middle of otherwise open voicings would
+      # be what I would expect to see pass in 5+ voice chords).
+      if (  @chord > 2
+        and exists $params{'no_partial_closed'}
+        and $params{'no_partial_closed'} ) {
+        # Exclude 3rds near fundamental where next voice 5th+ out
+        if ( $intervals[0] < 5 and $intervals[1] > 6 ) {
+          next TOPV;
+        }
+        # Exclude 3rds at top where next lower voice 5th+ out
+        if ( $intervals[-1] < 5 and $intervals[-2] > 6 ) {
+          next TOPV;
+        }
+
+        # Exclude cases where highest voice has wandered off by a larger
+        # interval than seen below.
+        my @ordered_intv =
+          sort { $intv_by_idx{$b} <=> $intv_by_idx{$a} } keys %intv_by_idx;
+        if ( $ordered_intv[0] > $ordered_intv[-1]
+          and all { $intv_by_idx{ $ordered_intv[0] } > 1 + $intv_by_idx{$_} }
+          @ordered_intv[ 1 .. $#ordered_intv ] ) {
+          next TOPV;
+        }
+      }
+
+      # Nix any identical chord voicings (c e g == c' e' g')
+      unless ( exists $params{'allow_transpositions'}
+        and $params{'allow_transpositions'} ) {
+        next TOPV if $seen_intervals{"@intervals"}++;
+      }
 
       push @revoicings, \@chord;
     }
@@ -206,7 +245,7 @@ Music::Chord::Positions - generate various chord inversions and voicings
   use Music::Chord::Positions qw/:all/;
 
   my @inverses = chord_inv([0,4,7]);
-  my @voicings = chord_pos([0,4,7]);
+  my @voicings = chord_pos([0,4,7], voice_count => 4);
 
   my @voices = chords2voices(@inverses);
 
@@ -241,7 +280,7 @@ of this module's distribution for sample scripts).
 =head1 SUBROUTINES
 
 Nothing exported by default. Use the fully qualified path, or import
-stuff. If OO desired, code something up?
+specific functions, or use the C<:all> import tag.
 
 =over 4
 
@@ -279,11 +318,27 @@ than 19 semitones (octave+fifth) between adjacent pitches will also be
 excluded, as will transpositions of the same voicing into higher
 registers.
 
+The default settings for C<chord_pos()> generate more voicings than may
+be permitted by music theory; a set more in line with conventional music
+theory would require the following options:
+
+  my @chords = chord_pos(
+    [qw/0 4 7/],
+    allow_transpositions =>  1, # as SATB can transpose up
+    no_partial_closed    =>  1, # exclude half open/closed positions
+    pitch_max            => -1, # avoids 36 (c''') in Soprano
+  );
+
 The B<chord_pos> method can be influenced by the following parameters
 (default values are shown). Beware that removing restrictions may result
 in many, many, many different voicings for larger pitch sets.
 
 =over 4
+
+=item B<allow_transpositions> => I<0>
+
+If set and true, allows transpositions of identical pitch sets into
+higher registers. That is, permit both 0 4 7 and 12 16 19.
 
 =item B<interval_adj_max> => I<19>
 
@@ -299,6 +354,12 @@ of the root pitch.
 If set and true, disables the unique pitch check. That is, voicings will
 be allowed with fewer pitches than in the original pitch set.
 
+=item B<no_partial_closed> => I<0>
+
+If set and true, disallows vocings somewhere between close position
+and open position. See C<t/Schoenberg.t> and the source for what is
+being done.
+
 =item B<octave_count> => I<2>
 
 How far above the register of the chord to generate voicings in. If set
@@ -309,7 +370,9 @@ maximum pitch generated inside the set generated by this option.
 =item B<pitch_max> => I<inf>
 
 Maximum pitch to allow, in semitones. For fine-grained control below the
-span generated by the B<octave_count> parameter.
+span generated by the B<octave_count> parameter. If positive, counts in
+semitones up from the lowest pitch to determine the maximum. If zero or
+negative, counts down from the B<octave_count> + 1 interval instead.
 
 =item B<root_any> => I<0>
 
@@ -355,8 +418,9 @@ someone sneaks in support for alternate scale systems in behind my back.
 
 L<Music::Chord::Note>
 
-B<Theory of Harmony> by Arnold Schoenberg. Whose simple chord voicing
-exercise prompted this not as simple diversion in coding.
+B<Theory of Harmony> by Arnold Schoenberg (ISBN 978-0-520-26608-7).
+Whose simple chord voicing exercise prompted this not as simple
+diversion in coding.
 
 =head1 AUTHOR
 
