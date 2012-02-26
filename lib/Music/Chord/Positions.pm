@@ -8,7 +8,7 @@ use Exporter ();
 use List::MoreUtils qw(all uniq);
 use List::Util qw(max min);
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
 
 our ( @ISA, @EXPORT_OK, %EXPORT_TAGS );
 @ISA = qw(Exporter);
@@ -28,6 +28,10 @@ sub chord_inv {
     unless defined $pitch_set and ref $pitch_set eq 'ARRAY';
 
   my ( @inversions, $max_pitch, $next_register );
+
+  if ( exists $params{'voice_count'} ) {
+    die "voice_count not supported for inversions";
+  }
 
   $max_pitch     = max(@$pitch_set);
   $next_register = $max_pitch + $DEG_IN_SCALE - $max_pitch % $DEG_IN_SCALE;

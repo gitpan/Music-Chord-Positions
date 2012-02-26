@@ -23,19 +23,18 @@ my (
   @orig_args,       %modes,           %params,
   %pitch2note,      %registers,       $LY_DEFAULT_DURATION,
   $chord_spec,      $cn,              $duration,
-  $exit_status,     $flats,           $fudge,
-  $is_conventional, $ly_lower_voices, $ly_upper_voices,
-  $mode,            $omit_orig,       $pitch_set,
-  $reverse,         $shuffle,         $transpose,
-  $voice_count,
+  $flats,           $fudge,           $is_conventional,
+  $ly_lower_voices, $ly_upper_voices, $mode,
+  $omit_orig,       $pitch_set,       $reverse,
+  $shuffle,         $transpose,       $voice_count,
 );
 
 @orig_args = ( map { $_ =~ tr/"/'/; $_ } basename($0), @ARGV );
 
-$duration    = 1;      # whole note
-$exit_status = 0;
-$fudge       = 0.5;    # used to help figure out what staff a voice ends up in
-$transpose   = 0;
+$duration = 1;      # whole note
+$fudge    = 0.5;    # used to help figure out what staff a voice ends up in
+$ly_lower_voices = $ly_upper_voices = '';
+$transpose       = 0;
 
 %pitch2note =
   qw( 0 c 1 cis 2 d 3 dis 4 e 5 f 6 fis 7 g 8 gis 9 a 10 ais 11 b );
@@ -130,7 +129,7 @@ if ( $chord_spec =~ m/[A-Za-z()-]/ or $chord_spec =~ m/^\s*\d+\s*$/ ) {
     for my $pitch (@$voice) {
       $pitch += $transpose if $transpose;
       my $ly_pitch = $pitch2note{ $pitch % scale_deg() };
-      my $reg_num  = int( $pitch / scale_deg() );
+      my $reg_num  = floor( $pitch / scale_deg() );
       push @registers, $reg_num;
 
       $pitch = $ly_pitch . $registers{$reg_num};
@@ -153,7 +152,17 @@ if ( $chord_spec =~ m/[A-Za-z()-]/ or $chord_spec =~ m/^\s*\d+\s*$/ ) {
   }
 }
 
-$exit_status = print <<"END_TMPL";
+if ( lyify() ) {
+  exit 0;
+}
+die "warning: problem emitting lilypond data\n";
+
+########################################################################
+#
+# SUBROUTINES
+
+sub lyify {
+  print <<"END_TMPL";
 \\version "2.12.0"
 
 #(define-markup-list-command (paragraph layout props args) (markup-list?)
@@ -167,13 +176,11 @@ $exit_status = print <<"END_TMPL";
 
 upper = {
   \\clef treble
-
   $ly_upper_voices
 }
 
 lower = {
   \\clef bass
-
   $ly_lower_voices
 }
 
@@ -190,19 +197,7 @@ lower = {
   \\midi { }
 }
 END_TMPL
-
-END {
-  unless ( close(STDOUT) ) {
-    warn "error: problem closing STDOUT: $!\n";
-    exit 74;
-  }
 }
-
-exit $exit_status;
-
-########################################################################
-#
-# SUBROUTINES
 
 sub print_help {
   warn <<"END_USAGE";
@@ -225,3 +220,11 @@ Options:
 
 END_USAGE
 }
+
+END {
+  unless ( close(STDOUT) ) {
+    warn "error: problem closing STDOUT: $!\n";
+    exit 74;
+  }
+}
+
