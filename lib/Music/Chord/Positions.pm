@@ -1,5 +1,28 @@
+# TODO
+# * chord_pos
+#   - support arbitrary? voice counts (would need doubling rules?) Extra
+#     voices would likely run into either doubling or maximum pitch
+#     limits, so might need good-enough effort (or lots of doublings)?
+#   - or lower than @ps voice count, which might require new logic or
+#     priority on the pitches?
+#   - inversion through "root_any" and then select only root 3rd or
+#     whatever afterwards?
+#   - nix octave_count and pitch_max in favor of just specified
+#     semitones up? - makes sense, as interval_adj_max is a semitone
+#     thing.
+#   - doublings could use more rules beyond "no" or "anything goes",
+#     perhaps optional list of "here's pitches that can be doubled" so
+#     can 2x the root or the 5th or whatever on demand.
+#   - logic tricky, could it be simplified with a Combinations module or
+#     by using ordering results from a glob() expansion?
+#   - callbacks so caller can better control the results?
+#
+# * progressions
+#   - support this, instead of using mcp-prog script?
+
 package Music::Chord::Positions;
 
+use 5.010;
 use strict;
 use warnings;
 
@@ -8,7 +31,7 @@ use Exporter ();
 use List::MoreUtils qw(all uniq);
 use List::Util qw(max min);
 
-our $VERSION = '0.06';
+our $VERSION = '0.08';
 
 our ( @ISA, @EXPORT_OK, %EXPORT_TAGS );
 @ISA = qw(Exporter);
@@ -323,8 +346,8 @@ excluded, as will transpositions of the same voicing into higher
 registers.
 
 The default settings for C<chord_pos()> generate more voicings than may
-be permitted by music theory; a set more in line with conventional music
-theory would require the following options:
+be permitted by music theory; a set more in line with what Schoenberg
+outlines in his chord positions chapter would require something like:
 
   my @chords = chord_pos(
     [qw/0 4 7/],
@@ -332,6 +355,11 @@ theory would require the following options:
     no_partial_closed    =>  1, # exclude half open/closed positions
     pitch_max            => -1, # avoids 36 (c''') in Soprano
   );
+
+Though Schoenberg later on uses voicings the above would exclude when
+dealing with sevenths, so restrictions might be best done after
+reviewing the full list of resulting chords for the desired qualities,
+not starting from a limited set of assumed desired outcomes.
 
 The B<chord_pos> method can be influenced by the following parameters
 (default values are shown). Beware that removing restrictions may result
@@ -403,7 +431,9 @@ pitch chords, in which case the root pitch will be doubled:
 The chord voicings allowed by the default options may still not suit
 certain musical styles; for example, in SATB chorales, the bass alone is
 allowed to drift far from the other voices, but not both the bass and
-tenor from the upper voices.
+tenor from the upper voices. Voicings are not restricted by the limits
+of the human voice or for other instruments; checks of this nature would
+need to be done by the calling code on the results.
 
 =item B<chords2voices>( I<pitch set list> )
 
@@ -420,7 +450,7 @@ someone sneaks in support for alternate scale systems in behind my back.
 
 =head1 SEE ALSO
 
-L<Music::Chord::Note>
+L<Music::Chord::Note>, L<Music::AtonalUtil>
 
 B<Theory of Harmony> by Arnold Schoenberg (ISBN 978-0-520-26608-7).
 Whose simple chord voicing exercise prompted this not as simple
@@ -432,7 +462,7 @@ Jeremy Mates E<lt>jmates@cpan.orgE<gt>
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011 Jeremy Mates
+Copyright (C) 2011-2012 Jeremy Mates
 
 This library is free software; you can redistribute it and/or modify it
 under the same terms as Perl itself, either Perl version 5.14 or, at
