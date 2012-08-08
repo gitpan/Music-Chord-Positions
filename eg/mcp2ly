@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #
 # Accepts various inputs, applies Music::Chord::Positions functions to
 # that input, outputs lilypond data containing the results. Example:
@@ -102,7 +102,7 @@ my $mcp = Music::Chord::Positions->new;
 
   if ( $voice_count and exists $params{'voice_count'} ) {
     die "error: voice_count specified twice??\n";
-  } elsif ( $voice_count and $mode eq 'voc' ) {
+  } elsif ( $voice_count and $mode eq 'chord_pos' ) {
     $params{voice_count} = $voice_count;
   }
 
