@@ -23,8 +23,9 @@ requires:
   List::Util: 0
   Music::Chord::Note: 0
   Test::More: 0
+  perl: 5.01
 resources:
   homepage: http://github.com/thrig/Music-Chord-Positions
   license: http://dev.perl.org/licenses/
   repository: http://github.com/thrig/Music-Chord-Positions
-version: 0.60
+version: 0.61
